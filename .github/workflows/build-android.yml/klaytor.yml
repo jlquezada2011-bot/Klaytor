@@ -1,0 +1,120 @@
+name: Build Klaytor Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build Klaytor APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install missing dependencies
+        run: |
+          npm install express cookie-parser dotenv recharts
+          npm install -D @types/express @types/cookie-parser
+
+      - name: Fix TypeScript request type
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          file = Path("src/server/controllers/adminController.ts")
+
+          if file.exists():
+              text = file.read_text()
+
+              if 'from "express"' in text or "from 'express'" in text:
+                  pass
+              else:
+                  text = 'import { Request, Response } from "express";\n' + text
+
+              if "interface AuthenticatedRequest" in text:
+                  start = text.find("interface AuthenticatedRequest")
+                  brace = text.find("{", start)
+
+                  if brace != -1:
+                      depth = 0
+                      end = -1
+
+                      for i in range(brace, len(text)):
+                          if text[i] == "{":
+                              depth += 1
+                          elif text[i] == "}":
+                              depth -= 1
+                              if depth == 0:
+                                  end = i + 1
+                                  break
+
+                      if end != -1:
+                          replacement = """interface AuthenticatedRequest extends Request {
+            user?: {
+              id?: string;
+              email?: string;
+              role?: string;
+            };
+          }"""
+
+                          text = text[:start] + replacement + text[end:]
+
+              file.write_text(text)
+          PY
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Build web application
+        run: npm run build
+
+      - name: Install Capacitor Android
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Accept Android licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Make Gradle executable
+        run: chmod +x android/gradlew
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Klaytor-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
