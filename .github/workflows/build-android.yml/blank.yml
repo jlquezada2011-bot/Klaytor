@@ -1,0 +1,79 @@
+name: Build Klaytor Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build Klaytor APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Klaytor
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check TypeScript
+        run: npm run lint
+
+      - name: Build Klaytor web app
+        run: npm run build:android
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Capacitor Android
+        run: |
+          npm install @capacitor/core@6 @capacitor/android@6
+          npm install --save-dev @capacitor/cli@6
+
+      - name: Create Android project
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK
+        run: |
+          test -f android/app/build/outputs/apk/debug/app-debug.apk
+          ls -lh android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Klaytor APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Klaytor-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
