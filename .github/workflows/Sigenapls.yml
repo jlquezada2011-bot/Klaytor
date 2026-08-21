@@ -1,0 +1,72 @@
+name: Build Klaytor Android APK
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+      # Node 20
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Java 17
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      # Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      # Install existing dependencies
+      - name: Install Dependencies
+        run: npm install
+      # Install dependencies required by Klaytor
+      - name: Install Missing Klaytor Dependencies
+        run: |
+          npm install express dotenv cookie-parser recharts
+          npm install -D @types/express @types/cookie-parser
+      # Capacitor configuration
+      - name: Create Capacitor Config
+        run: |
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.klaytor.app",
+            "appName": "Klaytor",
+            "webDir": "dist",
+            "server": {
+              "androidScheme": "https"
+            }
+          }
+          EOF
+      # Build the React/Vite application
+      - name: Build Klaytor
+        run: npm run build
+      # Create Android project if it doesn't exist
+      - name: Create Android Project
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+      # Sync Capacitor
+      - name: Sync Capacitor
+        run: npx cap sync android
+      # Build APK
+      - name: Build Android APK
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleDebug --stacktrace
+      # Upload APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Klaytor-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
