@@ -1,0 +1,83 @@
+name: Build Klaytor Android APK
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+      # Install and use Node.js 20 directly
+      - name: Setup Node.js 20
+        run: |
+          source "$NVM_DIR/nvm.sh"
+          nvm install 20
+          nvm use 20
+          node --version
+          npm --version
+      # Install project dependencies
+      - name: Install Dependencies
+        run: |
+          source "$NVM_DIR/nvm.sh"
+          nvm use 20
+          npm install
+          npm install express dotenv cookie-parser recharts
+          npm install -D @types/express @types/cookie-parser
+      # Setup Java
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      # Setup Android
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      # Create Capacitor config
+      - name: Create Capacitor Config
+        run: |
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.klaytor.app",
+            "appName": "Klaytor",
+            "webDir": "dist",
+            "server": {
+              "androidScheme": "https"
+            }
+          }
+          EOF
+      # Build Klaytor
+      - name: Build Web App
+        run: |
+          source "$NVM_DIR/nvm.sh"
+          nvm use 20
+          npm run build
+      # Create Android project
+      - name: Create Android Project
+        run: |
+          source "$NVM_DIR/nvm.sh"
+          nvm use 20
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+      # Sync Capacitor
+      - name: Sync Capacitor
+        run: |
+          source "$NVM_DIR/nvm.sh"
+          nvm use 20
+          npx cap sync android
+      # Build APK
+      - name: Build Android APK
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleDebug --stacktrace
+      # Upload APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Klaytor-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
