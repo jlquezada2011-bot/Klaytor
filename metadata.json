@@ -1,0 +1,6 @@
+{
+  "name": "Klaytor Health",
+  "description": "Secure, modern digital health platform for patients, healthcare providers, and administrators with health records, appointment scheduling, vitals monitoring, and AI health assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
